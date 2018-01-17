@@ -1,0 +1,30 @@
+import javax.annotation.PostConstruct
+
+import com.mongodb.{MongoClient, MongoClientURI}
+import org.mongodb.morphia.{Datastore, Morphia}
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Service
+
+@Service
+class MongoUtils {
+  @Value("${mongo.url}")
+  private var url: String = null
+  @Value("${mongo.default.db.name}")
+  private var defaultDbName: String = null
+  private var mongoClient: MongoClient = null
+  private var morphia: Morphia = null
+
+  @PostConstruct def init(): Unit = {
+    morphia = new Morphia
+    morphia.mapPackage("com.finup.nbsp.daas.mart.bean")
+    mongoClient = new MongoClient(new MongoClientURI(url))
+  }
+
+  def open(dbName: String): Datastore = {
+    val datastore = morphia.createDatastore(mongoClient, dbName)
+    datastore.ensureIndexes()
+    datastore
+  }
+
+  def open: Datastore = this.open(defaultDbName)
+}
