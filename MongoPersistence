@@ -1,0 +1,245 @@
+import java.text.SimpleDateFormat
+import java.util
+import javax.annotation.PostConstruct
+import java.util.Date
+
+import com.finup.nbsp.daas.mart.bean.{BaseBean, SearchBean, TaskBin, UserBean}
+import com.mongodb.WriteResult
+import org.bson.types.ObjectId
+import org.mongodb.morphia.Datastore
+import org.mongodb.morphia.query.{Query, Sort}
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Component
+import java.lang.reflect.Field
+
+@Component
+class MongoPersistence {
+  private val LOG = LoggerFactory.getLogger(classOf[MongoPersistence])
+  private var datastore: Datastore = null
+  @Autowired
+  private var mongoUtils: MongoUtils = null
+
+
+  @PostConstruct def init(): Unit = {
+    this.datastore = mongoUtils.open
+  }
+
+
+  //初次保存
+  def save(taskBin: TaskBin): TaskBin = {
+    if (taskBin.taskName == "") {
+      taskBin.taskName = taskBin.author + MongoPersistence.dateft4.format(new Date())
+    }
+    val saveList = new util.ArrayList[TaskBin](1)
+    saveList.add(taskBin)
+    datastore.save(new java.util.ArrayList[TaskBin](saveList))
+    LOG.info("保存数据，{}", taskBin)
+    taskBin
+  }
+
+  //初次保存
+  def save(taskBin: UserBean): UserBean = {
+    val saveList = new util.ArrayList[UserBean](1)
+    saveList.add(taskBin)
+    datastore.save(new java.util.ArrayList[UserBean](saveList))
+    LOG.info("保存数据，{}", taskBin)
+    taskBin
+  }
+
+
+  def count[E <: BaseBean](clazz: Class[E]): Long = {
+    assert(clazz != null, "clazz 不能为空")
+    datastore.find(clazz).count
+  }
+
+  def get[E <: BaseBean](clazz: Class[E], id: ObjectId): E = {
+    assert(clazz != null && id != null)
+    datastore.find(clazz).field("id").equal(id).get
+
+  }
+
+  def get[E <: BaseBean](clazz: Class[E], filters: util.Map[String, AnyRef]): E = {
+    assert(clazz != null)
+    var query: Query[E] = datastore.find(clazz)
+    val keys: util.Set[String] = filters.keySet
+    val keyInterator: util.Iterator[String] = keys.iterator
+    while ( {
+      keyInterator.hasNext
+    }) {
+      val key: String = keyInterator.next
+      query = query.filter(key, filters.get(key))
+    }
+    query.get
+  }
+
+  def get[E <: BaseBean](clazz: Class[E], key: String, value: String): E = {
+    assert(clazz != null)
+    var query: Query[E] = datastore.find(clazz)
+    query = query.filter(key, value)
+    query.get
+  }
+
+  def getBy[E <: BaseBean](clazz: Class[E], filters: util.Map[String, _]): util.List[E] = {
+    assert(clazz != null)
+    var query: Query[E] = datastore.find(clazz)
+    if (filters != null) {
+      val keys: util.Set[String] = filters.keySet
+      val keyInterator: util.Iterator[String] = keys.iterator
+      while ( {
+        keyInterator.hasNext
+      }) {
+        val key: String = keyInterator.next
+        query = query.filter(key, filters.get(key))
+      }
+    }
+    query.asList
+  }
+
+  //条件搜索逻辑
+  def find[E <: SearchBean, V <: BaseBean](searchBean: SearchBean, clazz: Class[V]): util.List[V] = {
+    assert(searchBean != null)
+    var query: Query[V] = datastore.find(clazz)
+    val fileds = searchBean.getClass.getDeclaredFields
+    for (field <- fileds) {
+      //
+      field.setAccessible(true)
+      if (field.getName.equals("taskName")) {
+        if (field.get(searchBean).toString != "") {
+          query = query.filter("taskName exists", field.get(searchBean).toString)
+        }
+      }
+      else if (field.getName.equals("dateStart")) {
+
+        var longTime = 0L
+        longTime = MongoPersistence.getLongTime(field, searchBean)
+        query = query.filter("createLongTime >=", longTime)
+
+      }
+      else if (field.getName.equals("dateEnd")) {
+        var longTime = 0L
+        longTime = MongoPersistence.getLongTime(field, searchBean) + 24 * 3600 * 1000
+        query = query.filter("createLongTime <=", longTime)
+      }
+      else {
+        if (field.get(searchBean).toString != "") {
+          query = query.filter(field.getName + " =", field.get(searchBean).toString)
+        }
+
+      }
+
+    }
+    query.asList()
+
+  }
+
+  //默认搜索逻辑，只过滤username
+  def find[V <: BaseBean](username: String, filedName: String, clazz: Class[V]): util.List[V] = {
+    var query: Query[V] = datastore.find(clazz)
+    query = query.filter(filedName + " =", username)
+    query.asList
+  }
+
+  def getBy[E <: BaseBean](clazz: Class[E], key: String, value: String): util.List[E] = {
+    assert(clazz != null)
+    var query: Query[E] = datastore.find(clazz)
+    query = query.filter(key, value)
+    query.asList
+  }
+
+  //  @SuppressWarnings(Array("deprecation"))
+  //  def getByPage[E <: BaseBean](clazz: Class[E], pageBean: PageBean[E], asOrderbyIndication: String, filters: util.Map[String, _]): PageBean[E] = {
+  //    assert(clazz != null)
+  //    //---------------------获取总页数------------------------
+  //    var query: Query[E] = datastore.find(clazz)
+  //    val count: Long = this.count(clazz)
+  //    pageBean.setPageCount(count)
+  //    //---------------------获取实体--------------------------
+  //    if (filters != null) {
+  //      val keys: util.Set[String] = filters.keySet
+  //      val keyInterator: util.Iterator[String] = keys.iterator
+  //      while ( {
+  //        keyInterator.hasNext
+  //      }) {
+  //        val key: String = keyInterator.next
+  //        query = query.filter(key, filters.get(key))
+  //      }
+  //    }
+  //    query.order("-" + asOrderbyIndication).offset(pageBean.getCurrentPage * pageBean.getPageSize).limit(pageBean.getPageSize)
+  //    pageBean.setList(query.asList)
+  //    pageBean
+  //  }
+  //
+  //  def getByPage[E <: BaseBean](clazz: Class[E], pageBean: PageBean[E], orderbyIndication: String): PageBean[E] = getByPage(clazz, pageBean, orderbyIndication, null)
+
+  def getMaxValueBeanList[E <: BaseBean](clazz: Class[E], asOrderbyIndication: String): util.List[E] = {
+    assert(clazz != null)
+    val query: Query[E] = datastore.find(clazz)
+    val list: util.List[E] = query.order("-" + asOrderbyIndication).asList
+    list
+  }
+
+  def getMaxValueBean[E <: BaseBean](clazz: Class[E], asOrderbyIndication: String): E = {
+    assert(clazz != null)
+    val query: Query[E] = datastore.find(clazz)
+    val list: util.List[E] = query.order(Sort.descending(asOrderbyIndication), Sort.descending("createTime")).limit(1).asList
+    list.get(0)
+  }
+
+  def findAll[E <: BaseBean](clazz: Class[E]): util.List[E] = getBy(clazz, null)
+
+  /**
+    * 清空表中数据，不要随便使用，主要用于测试
+    *
+    * @param clazz
+    *
+    */
+  def empty[E <: BaseBean](clazz: Class[E]): Unit = {
+    assert(clazz != null)
+    datastore.delete(datastore.createQuery(clazz))
+  }
+
+  def exists[E <: BaseBean](clazz: Class[E], filters: util.Map[String, _]): Boolean = {
+    val list: util.List[E] = this.getBy(clazz, filters)
+    list != null && list.size > 0
+  }
+
+  def exists[E <: BaseBean](clazz: Class[E], key: String, value: String): Boolean = {
+    val filters: util.Map[String, String] = new util.HashMap[String, String]
+    filters.put(key, value)
+    exists(clazz, filters)
+  }
+
+  def remove[E <: BaseBean](clazz: Class[E], id: ObjectId): Int = {
+    val result: WriteResult = datastore.delete(clazz, id)
+    result.getN
+  }
+}
+
+object MongoPersistence {
+  def apply: MongoPersistence = new MongoPersistence()
+
+  val dateft = new SimpleDateFormat("yyyy.MM.dd")
+  val dateft2 = new SimpleDateFormat("yyyy-MM-dd")
+  val dateft3 = new SimpleDateFormat("yyyy/MM/dd")
+  val dateft4 = new SimpleDateFormat("yyyyMMdd")
+
+  def getLongTime(field: Field, searchBean: SearchBean): Long = {
+    var longTime = 0L
+    try {
+      if (field.get(searchBean).toString.contains('.')) {
+        longTime = dateft.parse(field.get(searchBean).toString).getTime
+      } else if (field.get(searchBean).toString.contains('-')) {
+        longTime = dateft2.parse(field.get(searchBean).toString).getTime
+      } else if (field.get(searchBean).toString.contains('/')) {
+        longTime = dateft3.parse(field.get(searchBean).toString).getTime
+      } else {
+        longTime = dateft4.parse(field.get(searchBean).toString).getTime
+      }
+    } catch {
+      case ex: Exception => ex.getMessage
+    }
+    longTime
+  }
+
+}
