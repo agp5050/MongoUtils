@@ -1,0 +1,79 @@
+@Service
+class UserInfoCache {
+  @Autowired
+  var dao: MongoPersistence = null
+  val TIME_INTERVAL = 30 * 60 * 1000
+
+  val cache = new scala.collection.mutable.HashMap[String, UserCache]()
+
+  def isUserLogined(token: String): PojoResult[String] = {
+    val userCache = cache.get(token)
+    userCache match {
+      case Some(oldUser) =>
+        if (System.currentTimeMillis() - oldUser.timestamp < TIME_INTERVAL) {
+          cache.put(token, UserCache(token, System.currentTimeMillis(), oldUser.username, oldUser.email))
+          return PojoResult.logined(token,oldUser.username, oldUser.email )
+        }
+      case None =>
+    }
+    PojoResult.needLogin()
+  }
+
+  def getUsername(token: String): String = {
+    val userCache = cache.get(token)
+    userCache match {
+      case Some(oldUser) =>
+        return oldUser.username
+      case None =>
+    }
+    null
+  }
+
+  def getUserEmail(token: String): String = {
+    val userCache = cache.get(token)
+    userCache match {
+      case Some(oldUser) =>
+        return oldUser.email
+      case None =>
+    }
+    null
+  }
+
+  def getUserCache(token: String): UserCache = {
+    val userCache = cache.get(token)
+    userCache match {
+      case Some(oldUser) =>
+        return oldUser
+      case None =>
+    }
+    null
+  }
+
+  def login(username: String, password: String): PojoResult[String] = {
+    if (username != null && password != null) {
+      val filters = new java.util.HashMap[String, String]()
+      filters.put("username", username)
+      filters.put("password", password)
+
+      val list: util.List[UserBean] = dao.getBy(classOf[UserBean], filters)
+      if (list != null && list.size > 0) {
+        val token = UUID.randomUUID().toString
+        cache.put(token, UserCache(token, System.currentTimeMillis(), username, list.get(0).getEmailAddress))
+        return PojoResult.logined(token, username, list.get(0).getEmailAddress)
+      }
+    }
+    PojoResult.needLogin()
+  }
+
+  def logout(token: String) = {
+    if (token != null) {
+      cache.remove(token)
+    }
+  }
+
+  def saveUser(user: UserBean) = {
+    dao.save(user)
+  }
+}
+
+case class UserCache(token: String, timestamp: Long, username: String, email: String)
