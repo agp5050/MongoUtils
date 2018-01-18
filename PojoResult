@@ -1,0 +1,91 @@
+public class PojoResult<T> {
+
+    public enum Status {
+        OK, ERROR, EMPTY, EXISTED, LOGINED, TIME_OUT,SAVED
+    }
+
+    private Status status;
+    private String description;
+    private T data;
+
+    public PojoResult() {
+
+    }
+
+    public PojoResult(T pojo) {
+        if (pojo != null) {
+            this.status = Status.OK;
+            this.data = pojo;
+            this.setDescription("数据查询成功");
+        } else {
+            this.status = Status.EMPTY;
+            this.setDescription("没有查询到数据");
+        }
+    }
+
+    public static PojoResult<String> logined(String token, String username,String email) {
+        PojoResult<String> result = new PojoResult<>();
+        result.setDescription(username + " 登陆成功");
+        result.setData(token+","+email);
+        result.setStatus(Status.LOGINED);
+
+        return result;
+    }
+
+    public static PojoResult<String> timeout(String token, String username) {
+        PojoResult<String> result = new PojoResult<>();
+        result.setDescription(username + " 登陆超时");
+        result.setStatus(Status.TIME_OUT);
+
+        return result;
+    }
+
+    public static PojoResult<String> needLogin() {
+        PojoResult<String> result = new PojoResult<>();
+        result.setDescription(" 请登陆系统");
+        result.setStatus(Status.ERROR);
+
+        return result;
+    }
+
+    public static PojoResult<String> loginFailed() {
+        PojoResult<String> result = new PojoResult<>();
+        result.setDescription("登陆失败");
+        result.setStatus(Status.ERROR);
+
+        return result;
+    }
+
+    public Status getStatus() {
+        return status;
+    }
+
+    public void setStatus(Status status) {
+        this.status = status;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public T getData() {
+        return data;
+    }
+
+    public void setData(T data) {
+        this.data = data;
+    }
+
+    @Override
+    public String toString() {
+        return "PojoResult{" +
+                "status=" + status +
+                ", description='" + description + '\'' +
+                ", data=" + data +
+                '}';
+    }
+}
